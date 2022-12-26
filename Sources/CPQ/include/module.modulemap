@@ -1,0 +1,4 @@
+module CPQ {
+    umbrella header "cpq.h"
+    export *
+}

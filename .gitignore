@@ -1,0 +1,7 @@
+.build
+public.key
+private.key
+Package.resolved
+.DS_Store
+.git
+.swiftpm
