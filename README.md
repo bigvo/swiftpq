@@ -1,6 +1,7 @@
-# SwiftPQ - Post-Quantum Crypto Swift library and CLI, based on [PQClean](https://github.com/PQClean/PQClean)
+# SwiftPQ - Post-Quantum Crypto Swift library and CLI
 
 SwiftPQ helps you utilize Post-Quantum Digital Signature and Key Encapsulation schemes in your project.
+Based on [PQClean](https://github.com/PQClean/PQClean)
 
 ## Description
 
