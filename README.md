@@ -66,7 +66,7 @@ Use with your Vapor app:
     let kyber512 = PQCrypto.KEM.Kyber512()
     let keys = kyber512.kemKeypair()
     let encrypt = kyber512.kemEncrypt(publicKey: keys.publicKey)
-    let sharedSecret = kemDecrypt.kemDecrypt(cipherText: encrypt.cipherText, secretKey: keys.secretKey)
+    let sharedSecret = kyber512.kemDecrypt(cipherText: encrypt.cipherText, secretKey: keys.secretKey)
     
     if encrypt.sharedSecret == sharedSecret {
         // Do something
