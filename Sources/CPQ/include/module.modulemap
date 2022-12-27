@@ -1,4 +1,4 @@
 module CPQ {
-    umbrella header "cpq.h"
+    umbrella header "../cpq.h"
     export *
 }

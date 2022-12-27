@@ -1,8 +1,5 @@
-//
-//  File.swift
-//  
-//
-//  Created by Vladimir Young on 12/27/22.
-//
-
-import Foundation
+#include "dilithium2/api.h"
+#include "dilithium3/api.h"
+#include "dilithium5/api.h"
+#include "falcon-512/api.h"
+#include "falcon-1024/api.h"

@@ -1,8 +1,6 @@
-//
-//  File.swift
-//  
-//
-//  Created by Vladimir Young on 12/27/22.
-//
-
-import Foundation
+#include "kyber512/api.h"
+#include "kyber768/api.h"
+#include "kyber1024/api.h"
+#include "hqc-rmrs-128/api.h"
+#include "hqc-rmrs-192/api.h"
+#include "hqc-rmrs-256/api.h"
