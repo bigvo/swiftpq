@@ -1,5 +1,5 @@
 import Foundation
-import CryptoKit
+import Crypto
 import Security
 
 // MARK: Encode key to PEM-formatted string
