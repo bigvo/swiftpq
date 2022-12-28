@@ -23,6 +23,11 @@ SwiftPQ utilizes wrapped C functions from [PQClean](https://github.com/PQClean/P
 * Falcon-512
 * Falcon-1024
 
+### Supported platforms
+
+* macOS
+* Linux
+
 ### Usage example - CLI
 
 - Generate keys in required algorithm and save to required path, --save <path> is optional
