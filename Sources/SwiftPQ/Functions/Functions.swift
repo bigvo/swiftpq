@@ -1,6 +1,5 @@
 import Foundation
 import Crypto
-import Security
 
 // MARK: Encode key to PEM-formatted string
 public func encodeToPemKey(data: Data, label: String) -> String {
