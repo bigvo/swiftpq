@@ -17,19 +17,6 @@ public func encodeToPemKey(data: Data, label: String) -> String {
     return pemKey
 }
 
-// MARK: Decode from PEM-formatted string
-public func decodePemKey(pemKey: String) -> Data? {
-    let lines = pemKey.components(separatedBy: "\n")
-
-    // Remove the BEGIN and END lines and any empty lines
-    let base64EncodedLines = lines.filter { !$0.hasPrefix("-----") && !$0.isEmpty }
-
-    // Concatenate the remaining lines
-    let base64EncodedData = base64EncodedLines.joined()
-
-    return Data(base64Encoded: base64EncodedData)
-}
-
 // MARK: Encrypt private key using AES GCM encryption
 @available(macOS 11.0, *)
 func encryptDataWithPassword(data: Data, password: String) throws -> Data {
@@ -45,7 +32,7 @@ func encryptDataWithPassword(data: Data, password: String) throws -> Data {
 
 // MARK: Decrypt AES GCM encrypted private key
 @available(macOS 11.0, *)
-func decryptDataWithPassword(encryptedData: Data, password: String) throws -> Data? {
+func decryptDataWithPassword(encryptedData: Data, password: String) throws -> [UInt8]? {
     // Derive the key from the password
     let passwordData = Data(password.utf8)
     let key = SymmetricKey(data: passwordData)
@@ -55,7 +42,7 @@ func decryptDataWithPassword(encryptedData: Data, password: String) throws -> Da
     // Try to decrypt the data with the derived key
     do {
         let decryptedData = try AES.GCM.open(sealedBox, using: derivedKey)
-        return decryptedData
+        return [UInt8](decryptedData)
     } catch {
         print("Error decrypting data: \(error)")
         return nil

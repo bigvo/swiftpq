@@ -20,19 +20,19 @@ public protocol PQCryptoSIGN {
     func signKeypair() -> (publicKey: [UInt8], secretKey: [UInt8])
     
     // MARK: Sign any message with conformable private key, return signature
-    func signature(message: String, secretKey: Data) throws -> Data
+    func signature(message: [UInt8], secretKey: [UInt8]) throws -> [UInt8]
     
     // MARK: Verify message with signature and public key
-    func verify(signature: Data, message: String, publicKey: Data) -> Bool
+    func verify(signature: [UInt8], message: [UInt8], publicKey: [UInt8]) -> Bool
     
     // MARK: Return signed message
-    func sign(message: [UInt8], secretKey: Data) throws -> [UInt8]
-    
-    // MARK: Generate keys, encrypt secret key using AES.GCM from CryptoKit and encode to PEM-format
-    func generateEncodeKeys(password: String) throws -> (publicKey: String, secretKey: String)
+    func sign(message: [UInt8], secretKey: [UInt8]) throws -> [UInt8]
     
     // MARK: Open signed message, return decrypted message
     func open(signedMessage: [UInt8], publicKey: [UInt8]) throws -> [UInt8]
+    
+    // MARK: Generate keys, encrypt secret key using AES.GCM from CryptoKit and encode to PEM-format
+    func generateEncodeKeys(password: String) throws -> (publicKey: String, secretKey: String)
 }
 
 @available(macOS 11.0, *)
@@ -52,19 +52,35 @@ public class PQCrypto {
         case signFailed
         /// Message decryption
         case messageOpenFailed
+        /// Unable to decode Base64 encoded string
+        case decodingFailed
     }
     
     // MARK: Decrypt private key
-    public func decryptPrivateKey(pemKey: String, password: String) throws -> Data {
-        guard let encryptedKey = decodePemKey(pemKey: pemKey) else {
-            print("Decoding failed.")
-            throw PQCrypto.Error.invalidFormat
-        }
-        guard let decryptedKey = try decryptDataWithPassword(encryptedData: encryptedKey, password: password) else {
+    public func decryptPrivateKey(pemKey: String, password: String) throws -> [UInt8] {
+        let encryptedKey = try decodePemKey(pemKey: pemKey)
+        guard let decryptedKey = try decryptDataWithPassword(encryptedData: encryptedKey.toData(), password: password) else {
             print("Decryption failed.")
             throw PQCrypto.Error.decryptionFailed
         }
         return decryptedKey
+    }
+    
+    // MARK: Decode from PEM-formatted string
+    public func decodePemKey(pemKey: String) throws -> [UInt8] {
+        let lines = pemKey.components(separatedBy: "\n")
+
+        // Remove the BEGIN and END lines and any empty lines
+        let base64EncodedLines = lines.filter { !$0.hasPrefix("-----") && !$0.isEmpty }
+
+        // Concatenate the remaining lines
+        let base64EncodedData = base64EncodedLines.joined()
+
+        guard let data = Data(base64Encoded: base64EncodedData) else {
+            throw PQCrypto.Error.decodingFailed
+        }
+        
+        return [UInt8](data)
     }
 }
 
@@ -487,38 +503,33 @@ extension PQCrypto {
             }
             
             // MARK: Wrapped PQCLEAN_DILITHIUM2_CLEAN_crypto_sign_signature
-            public func signature(message: String, secretKey: Data) throws -> Data {
+            public func signature(message: [UInt8], secretKey: [UInt8]) throws -> [UInt8] {
                 var sigLength: Int = Int(PQCLEAN_DILITHIUM2_CLEAN_CRYPTO_BYTES)
                 var sig = [UInt8](repeating: 0, count: sigLength)
-                var messageBytes = [UInt8](message.utf8)
-                var secretKeyBytes = [UInt8](secretKey)
+                var messageBytes = message
+                var secretKeyBytes = secretKey
                 
                 let status = PQCLEAN_DILITHIUM2_CLEAN_crypto_sign_signature(&sig, &sigLength, &messageBytes, messageBytes.count, &secretKeyBytes)
                 
                 if status != 0 {
                     throw PQCrypto.Error.signFailed
                 }
-                return Data(sig)
+                return sig
             }
             
             // MARK: Wrapped PQCLEAN_DILITHIUM2_CLEAN_crypto_sign_verify
-            public func verify(signature: Data, message: String, publicKey: Data) -> Bool {
-                let sigBytes = [UInt8](signature)
-                let messageBytes = [UInt8](message.utf8)
-                let pkBytes = [UInt8](publicKey)
-                
-                let status = PQCLEAN_DILITHIUM2_CLEAN_crypto_sign_verify(sigBytes, sigBytes.count, messageBytes, messageBytes.count, pkBytes)
+            public func verify(signature: [UInt8], message: [UInt8], publicKey: [UInt8]) -> Bool {
+                let status = PQCLEAN_DILITHIUM2_CLEAN_crypto_sign_verify(signature, signature.count, message, message.count, publicKey)
                 return status == 0
             }
             
             // MARK: Wrapped PQCLEAN_DILITHIUM2_CLEAN_crypto_sign
-            public func sign(message: [UInt8], secretKey: Data) throws  -> [UInt8] {
-                let sk = [UInt8](secretKey)
+            public func sign(message: [UInt8], secretKey: [UInt8]) throws  -> [UInt8] {
                 let sm = UnsafeMutablePointer<UInt8>.allocate(capacity: message.count + Int(PQCLEAN_DILITHIUM2_CLEAN_CRYPTO_BYTES))
                 
                 let smlen = UnsafeMutablePointer<Int>.allocate(capacity: 1)
                 
-                let result = PQCLEAN_DILITHIUM2_CLEAN_crypto_sign(sm, smlen, message, message.count, sk)
+                let result = PQCLEAN_DILITHIUM2_CLEAN_crypto_sign(sm, smlen, message, message.count, secretKey)
                 
                 if result != 0 {
                     throw PQCrypto.Error.signFailed
@@ -575,36 +586,32 @@ extension PQCrypto {
             }
             
             // MARK: Wrapped PQCLEAN_DILITHIUM3_CLEAN_crypto_sign_signature
-            public func signature(message: String, secretKey: Data) throws -> Data {
+            public func signature(message: [UInt8], secretKey: [UInt8]) throws -> [UInt8] {
                 var sigLength: Int = Int(PQCLEAN_DILITHIUM3_CLEAN_CRYPTO_BYTES)
                 var sig = [UInt8](repeating: 0, count: sigLength)
-                var messageBytes = [UInt8](message.utf8)
-                var secretKeyBytes = [UInt8](secretKey)
+                var messageBytes = message
+                var secretKeyBytes = secretKey
+                
                 let status = PQCLEAN_DILITHIUM3_CLEAN_crypto_sign_signature(&sig, &sigLength, &messageBytes, messageBytes.count, &secretKeyBytes)
                 if status != 0 {
                     throw PQCrypto.Error.signFailed
                 }
-                return Data(sig)
+                return sig
             }
             
             // MARK: Wrapped PQCLEAN_DILITHIUM3_CLEAN_crypto_sign_verify
-            public func verify(signature: Data, message: String, publicKey: Data) -> Bool {
-                let sigBytes = [UInt8](signature)
-                let messageBytes = [UInt8](message.utf8)
-                let pkBytes = [UInt8](publicKey)
-                
-                let status = PQCLEAN_DILITHIUM3_CLEAN_crypto_sign_verify(sigBytes, sigBytes.count, messageBytes, messageBytes.count, pkBytes)
+            public func verify(signature: [UInt8], message: [UInt8], publicKey: [UInt8]) -> Bool {
+                let status = PQCLEAN_DILITHIUM3_CLEAN_crypto_sign_verify(signature, signature.count, message, message.count, publicKey)
                 return status == 0
             }
             
             // MARK: Wrapped PQCLEAN_DILITHIUM3_CLEAN_crypto_sign
-            public func sign(message: [UInt8], secretKey: Data) throws  -> [UInt8] {
-                let sk = [UInt8](secretKey)
+            public func sign(message: [UInt8], secretKey: [UInt8]) throws  -> [UInt8] {
                 let sm = UnsafeMutablePointer<UInt8>.allocate(capacity: message.count + Int(PQCLEAN_DILITHIUM3_CLEAN_CRYPTO_BYTES))
                 
                 let smlen = UnsafeMutablePointer<Int>.allocate(capacity: 1)
                 
-                let result = PQCLEAN_DILITHIUM3_CLEAN_crypto_sign(sm, smlen, message, message.count, sk)
+                let result = PQCLEAN_DILITHIUM3_CLEAN_crypto_sign(sm, smlen, message, message.count, secretKey)
                 
                 if result != 0 {
                     throw PQCrypto.Error.signFailed
@@ -661,36 +668,31 @@ extension PQCrypto {
             }
             
             // MARK: Wrapped PQCLEAN_DILITHIUM5_CLEAN_crypto_sign_signature
-            public func signature(message: String, secretKey: Data) throws -> Data {
+            public func signature(message: [UInt8], secretKey: [UInt8]) throws -> [UInt8] {
                 var sigLength: Int = Int(PQCLEAN_DILITHIUM5_CLEAN_CRYPTO_BYTES)
                 var sig = [UInt8](repeating: 0, count: sigLength)
-                var messageBytes = [UInt8](message.utf8)
-                var secretKeyBytes = [UInt8](secretKey)
+                var messageBytes = message
+                var secretKeyBytes = secretKey
                 let status = PQCLEAN_DILITHIUM5_CLEAN_crypto_sign_signature(&sig, &sigLength, &messageBytes, messageBytes.count, &secretKeyBytes)
                 if status != 0 {
                     throw PQCrypto.Error.signFailed
                 }
-                return Data(sig)
+                return sig
             }
             
             // MARK: Wrapped PQCLEAN_DILITHIUM5_CLEAN_crypto_sign_verify
-            public func verify(signature: Data, message: String, publicKey: Data) -> Bool {
-                let sigBytes = [UInt8](signature)
-                let messageBytes = [UInt8](message.utf8)
-                let pkBytes = [UInt8](publicKey)
-                
-                let status = PQCLEAN_DILITHIUM5_CLEAN_crypto_sign_verify(sigBytes, sigBytes.count, messageBytes, messageBytes.count, pkBytes)
+            public func verify(signature: [UInt8], message: [UInt8], publicKey: [UInt8]) -> Bool {
+                let status = PQCLEAN_DILITHIUM5_CLEAN_crypto_sign_verify(signature, signature.count, message, message.count, publicKey)
                 return status == 0
             }
             
             // MARK: Wrapped PQCLEAN_DILITHIUM5_CLEAN_crypto_sign
-            public func sign(message: [UInt8], secretKey: Data) throws  -> [UInt8] {
-                let sk = [UInt8](secretKey)
+            public func sign(message: [UInt8], secretKey: [UInt8]) throws  -> [UInt8] {
                 let sm = UnsafeMutablePointer<UInt8>.allocate(capacity: message.count + Int(PQCLEAN_DILITHIUM5_CLEAN_CRYPTO_BYTES))
                 
                 let smlen = UnsafeMutablePointer<Int>.allocate(capacity: 1)
                 
-                let result = PQCLEAN_DILITHIUM5_CLEAN_crypto_sign(sm, smlen, message, message.count, sk)
+                let result = PQCLEAN_DILITHIUM5_CLEAN_crypto_sign(sm, smlen, message, message.count, secretKey)
                 
                 if result != 0 {
                     throw PQCrypto.Error.signFailed
@@ -747,38 +749,33 @@ extension PQCrypto {
             }
             
             // MARK: Wrapped PQCLEAN_FALCON512_CLEAN_crypto_sign_signature
-            public func signature(message: String, secretKey: Data) throws -> Data {
+            public func signature(message: [UInt8], secretKey: [UInt8]) throws -> [UInt8] {
                 let sig = UnsafeMutablePointer<UInt8>.allocate(capacity: Int(PQCLEAN_FALCON512_CLEAN_CRYPTO_BYTES))
                 var siglen: size_t = 0
-        
-                var messageBytes = [UInt8](message.utf8)
-                var secretKeyBytes = [UInt8](secretKey)
+                var messageBytes = message
+                var secretKeyBytes = secretKey
+                
                 let status = PQCLEAN_FALCON512_CLEAN_crypto_sign_signature(sig, &siglen, &messageBytes, messageBytes.count, &secretKeyBytes)
                 if status != 0 {
                     throw PQCrypto.Error.signFailed
                 }
                 let signature = Array(UnsafeBufferPointer(start: sig, count: siglen))
-                return Data(signature)
+                return signature
             }
             
             // MARK: Wrapped PQCLEAN_FALCON512_CLEAN_crypto_sign_verify
-            public func verify(signature: Data, message: String, publicKey: Data) -> Bool {
-                let sigBytes = [UInt8](signature)
-                let messageBytes = [UInt8](message.utf8)
-                let pkBytes = [UInt8](publicKey)
-                
-                let status = PQCLEAN_FALCON512_CLEAN_crypto_sign_verify(sigBytes, sigBytes.count, messageBytes, messageBytes.count, pkBytes)
+            public func verify(signature: [UInt8], message: [UInt8], publicKey: [UInt8]) -> Bool {
+                let status = PQCLEAN_FALCON512_CLEAN_crypto_sign_verify(signature, signature.count, message, message.count, publicKey)
                 return status == 0
             }
             
             // MARK: Wrapped PQCLEAN_FALCON512_CLEAN_crypto_sign
-            public func sign(message: [UInt8], secretKey: Data) throws  -> [UInt8] {
-                let sk = [UInt8](secretKey)
+            public func sign(message: [UInt8], secretKey: [UInt8]) throws  -> [UInt8] {
                 let sm = UnsafeMutablePointer<UInt8>.allocate(capacity: message.count + Int(PQCLEAN_FALCON512_CLEAN_CRYPTO_BYTES))
                 
                 let smlen = UnsafeMutablePointer<Int>.allocate(capacity: 1)
                 
-                let result = PQCLEAN_FALCON512_CLEAN_crypto_sign(sm, smlen, message, message.count, sk)
+                let result = PQCLEAN_FALCON512_CLEAN_crypto_sign(sm, smlen, message, message.count, secretKey)
                 
                 if result != 0 {
                     throw PQCrypto.Error.signFailed
@@ -834,38 +831,33 @@ extension PQCrypto {
             }
             
             // MARK: Wrapped PQCLEAN_FALCON1024_CLEAN_crypto_sign_signature
-            public func signature(message: String, secretKey: Data) throws -> Data {
+            public func signature(message: [UInt8], secretKey: [UInt8]) throws -> [UInt8] {
                 let sig = UnsafeMutablePointer<UInt8>.allocate(capacity: Int(PQCLEAN_FALCON1024_CLEAN_CRYPTO_BYTES))
                 var siglen: size_t = 0
         
-                var messageBytes = [UInt8](message.utf8)
-                var secretKeyBytes = [UInt8](secretKey)
+                var messageBytes = message
+                var secretKeyBytes = secretKey
                 let status = PQCLEAN_FALCON1024_CLEAN_crypto_sign_signature(sig, &siglen, &messageBytes, messageBytes.count, &secretKeyBytes)
                 if status != 0 {
                     throw PQCrypto.Error.signFailed
                 }
                 let signature = Array(UnsafeBufferPointer(start: sig, count: siglen))
-                return Data(signature)
+                return signature
             }
             
             // MARK: Wrapped PQCLEAN_FALCON1024_CLEAN_crypto_sign_verify
-            public func verify(signature: Data, message: String, publicKey: Data) -> Bool {
-                let sigBytes = [UInt8](signature)
-                let messageBytes = [UInt8](message.utf8)
-                let pkBytes = [UInt8](publicKey)
-                
-                let status = PQCLEAN_FALCON1024_CLEAN_crypto_sign_verify(sigBytes, sigBytes.count, messageBytes, messageBytes.count, pkBytes)
+            public func verify(signature: [UInt8], message: [UInt8], publicKey: [UInt8]) -> Bool {
+                let status = PQCLEAN_FALCON1024_CLEAN_crypto_sign_verify(signature, signature.count, message, message.count, publicKey)
                 return status == 0
             }
             
             // MARK: Wrapped PQCLEAN_FALCON1024_CLEAN_crypto_sign
-            public func sign(message: [UInt8], secretKey: Data) throws  -> [UInt8] {
-                let sk = [UInt8](secretKey)
+            public func sign(message: [UInt8], secretKey: [UInt8]) throws  -> [UInt8] {
                 let sm = UnsafeMutablePointer<UInt8>.allocate(capacity: message.count + Int(PQCLEAN_FALCON1024_CLEAN_CRYPTO_BYTES))
                 
                 let smlen = UnsafeMutablePointer<Int>.allocate(capacity: 1)
                 
-                let result = PQCLEAN_FALCON1024_CLEAN_crypto_sign(sm, smlen, message, message.count, sk)
+                let result = PQCLEAN_FALCON1024_CLEAN_crypto_sign(sm, smlen, message, message.count, secretKey)
                 
                 if result != 0 {
                     throw PQCrypto.Error.signFailed

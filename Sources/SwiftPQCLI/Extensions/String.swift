@@ -13,3 +13,9 @@ extension String {
         return randomString
     }
 }
+
+extension String {
+    func toUInt8Array() -> [UInt8] {
+        return [UInt8](self.utf8)
+    }
+}

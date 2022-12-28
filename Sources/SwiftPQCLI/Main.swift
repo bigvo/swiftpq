@@ -59,7 +59,7 @@ struct SwiftPQCLI: ParsableCommand {
         case "falcon1024":
             pqCryptoSIGN = PQCrypto.SIGN.Falcon1024()
         default:
-            throw PQCrypto.Error.invalidScheme
+            return
         }
         
         if generate {
@@ -123,10 +123,7 @@ struct SwiftPQCLI: ParsableCommand {
                 }
                 
                 let decryptedPrivateKey = try pqCrypto.decryptPrivateKey(pemKey: secretKeyData, password: String(cString: password))
-                guard let decodedPublicKey = decodePemKey(pemKey: publicKeyData) else {
-                    print("Unable to decode public key.")
-                    return
-                }
+                let decodedPublicKey = try pqCrypto.decodePemKey(pemKey: publicKeyData)
                 
                 if pqCryptoKEM != nil {
                     if validateKEMKeys(pqCryptoKEM: pqCryptoKEM!, publicKey: decodedPublicKey, secretKey: decryptedPrivateKey) {
@@ -175,7 +172,7 @@ struct SwiftPQCLI: ParsableCommand {
                     
                     let decryptedPrivateKey = try pqCrypto.decryptPrivateKey(pemKey: secretKeyData, password: String(cString: password))
                     
-                    let signature = try pqCryptoSIGN!.signature(message: message, secretKey: decryptedPrivateKey)
+                    let signature = try pqCryptoSIGN!.signature(message: message.toUInt8Array(), secretKey: decryptedPrivateKey)
                     
                     print("SIGNATURE: \(signature.base64EncodedString())")
                     return
@@ -202,16 +199,13 @@ struct SwiftPQCLI: ParsableCommand {
                         return
                     }
                     
-                    guard let decodedPublicKey = decodePemKey(pemKey: publicKeyData) else {
-                        print("Unable to decode public key.")
-                        return
-                    }
+                    let decodedPublicKey = try pqCrypto.decodePemKey(pemKey: publicKeyData)
                     
-                    // MARK: DELETE ME
                     print("SIGNATURE TO VERIFY: \(signature)\n")
                     print("MESSAGE: \(message)\n")
                     print("PUBLIC KEY: \(decodedPublicKey.base64EncodedString())\n")
-                    if pqCryptoSIGN!.verify(signature: Data(base64Encoded: signature)!, message: message, publicKey: decodedPublicKey) {
+                    
+                    if pqCryptoSIGN!.verify(signature: signature.toUInt8Array(), message: message.toUInt8Array(), publicKey: decodedPublicKey) {
                         print("Signature is valid.")
                         return
                     }
@@ -248,11 +242,11 @@ func saveKeys(publicKey: String, privateKey: String, to path: String) throws {
 }
 
 @available(macOS 11.0, *)
-func validateKEMKeys(pqCryptoKEM: PQCryptoKEM, publicKey: Data, secretKey: Data) -> Bool {
+func validateKEMKeys(pqCryptoKEM: PQCryptoKEM, publicKey: [UInt8], secretKey: [UInt8]) -> Bool {
     let startTime = Date()
     
-    let encrypt = pqCryptoKEM.kemEncrypt(publicKey: publicKey.bytes)
-    let decrypt = pqCryptoKEM.kemDecrypt(ciphertext: encrypt.cipherText, secretKey: secretKey.bytes)
+    let encrypt = pqCryptoKEM.kemEncrypt(publicKey: publicKey)
+    let decrypt = pqCryptoKEM.kemDecrypt(ciphertext: encrypt.cipherText, secretKey: secretKey)
     
     let endTime = Date()
     let elapsedTime = endTime.timeIntervalSince(startTime)
@@ -266,14 +260,14 @@ func validateKEMKeys(pqCryptoKEM: PQCryptoKEM, publicKey: Data, secretKey: Data)
     return encrypt.sharedSecret == decrypt
 }
 
-func validateSIGNKeys(pqCryptoSign: PQCryptoSIGN, publicKey: Data, secretKey: Data) throws -> Bool {
+func validateSIGNKeys(pqCryptoSign: PQCryptoSIGN, publicKey: [UInt8], secretKey: [UInt8]) throws -> Bool {
     let startTime = Date()
     let message = String.random(length: 10)
     let messageBytes = [UInt8](message.utf8)
     let pkBytes = [UInt8](publicKey)
     
-    let signature = try pqCryptoSign.signature(message: message, secretKey: secretKey)
-    let verify = pqCryptoSign.verify(signature: signature, message: message, publicKey: publicKey)
+    let signature = try pqCryptoSign.signature(message: messageBytes, secretKey: secretKey)
+    let verify = pqCryptoSign.verify(signature: signature, message: messageBytes, publicKey: publicKey)
     
     let signedMessage = try pqCryptoSign.sign(message: messageBytes, secretKey: secretKey)
     let openedMessage = try pqCryptoSign.open(signedMessage: signedMessage, publicKey: pkBytes)
