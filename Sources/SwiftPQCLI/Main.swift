@@ -205,7 +205,7 @@ struct SwiftPQCLI: ParsableCommand {
                     print("MESSAGE: \(message)\n")
                     print("PUBLIC KEY: \(decodedPublicKey.base64EncodedString())\n")
                     
-                    if pqCryptoSIGN!.verify(signature: signature.toUInt8Array(), message: message.toUInt8Array(), publicKey: decodedPublicKey) {
+                    if pqCryptoSIGN!.verify(signature: Data(base64Encoded: signature)!.bytes, message: message.toUInt8Array(), publicKey: decodedPublicKey) {
                         print("Signature is valid.")
                         return
                     }
